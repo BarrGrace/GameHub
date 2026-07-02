@@ -1,0 +1,28 @@
+# Java / Maven
+gamehub/target/
+gamehub/.mvn/
+gamehub/mvnw
+gamehub/mvnw.cmd
+gamehub/HELP.md
+gamehub/*.jar
+gamehub/*.class
+gamehub/.idea/
+gamehub/*.iml
+gamehub/.vscode/
+
+# Node / React
+gamehub-frontend/node_modules/
+gamehub-frontend/dist/
+gamehub-frontend/.env
+gamehub-frontend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker
+gamehub/docker-compose.override.yml

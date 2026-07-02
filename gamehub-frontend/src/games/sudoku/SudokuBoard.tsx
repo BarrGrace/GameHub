@@ -1,0 +1,60 @@
+interface Props {
+  current: number[][]
+  given: boolean[][]
+  selectedCell: [number, number] | null
+  onCellClick: (row: number, col: number) => void
+  disabled: boolean
+}
+
+export default function SudokuBoard({ current, given, selectedCell, onCellClick, disabled }: Props) {
+  return (
+    <div className="inline-block bg-blue-500 p-1 rounded-lg">
+      <div className="grid grid-cols-3 gap-1">
+        {[0, 1, 2].map((boxRow) =>
+          [0, 1, 2].map((boxCol) => (
+            <div key={`${boxRow}-${boxCol}`} className="grid grid-cols-3 gap-px bg-gray-600 p-px">
+              {[0, 1, 2].map((r) =>
+                [0, 1, 2].map((c) => {
+                  const i = boxRow * 3 + r
+                  const j = boxCol * 3 + c
+                  const value = current[i][j]
+                  const isGiven = given[i][j]
+                  const isSelected = selectedCell?.[0] === i && selectedCell?.[1] === j
+                  const isInSameRow = selectedCell?.[0] === i
+                  const isInSameCol = selectedCell?.[1] === j
+                  const isInSameBox =
+                    selectedCell &&
+                    Math.floor(selectedCell[0] / 3) === boxRow &&
+                    Math.floor(selectedCell[1] / 3) === boxCol
+
+                  let bg = isGiven ? 'bg-gray-800' : 'bg-gray-900'
+                  if (isInSameRow || isInSameCol || isInSameBox) {
+                    bg = isGiven ? 'bg-gray-700' : 'bg-gray-800'
+                  }
+                  if (isSelected) bg = 'bg-blue-900'
+
+                  return (
+                    <button
+                      key={`${i}-${j}`}
+                      onClick={() => onCellClick(i, j)}
+                      disabled={disabled || isGiven}
+                      className={`
+                        w-10 h-10 flex items-center justify-center text-xl font-bold
+                        ${bg}
+                        ${isGiven ? 'text-gray-300' : 'text-blue-300'}
+                        ${!isGiven && !disabled ? 'hover:bg-blue-800' : ''}
+                        disabled:cursor-not-allowed transition
+                      `}
+                    >
+                      {value !== 0 ? value : ''}
+                    </button>
+                  )
+                })
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
