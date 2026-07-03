@@ -10,7 +10,12 @@ import java.util.Random;
 @Component
 public class SudokuGenerator {
 
+    private final SudokuSolver solver;
     private final Random random = new Random();
+
+    public SudokuGenerator(SudokuSolver solver) {
+        this.solver = solver;
+    }
 
     public int[][] generateSolvedBoard() {
         int[][] board = new int[9][9];
@@ -19,7 +24,7 @@ public class SudokuGenerator {
     }
 
     public int[][] generatePuzzle(int[][] solution, String difficulty) {
-        int cellsToRemove = switch (difficulty.toLowerCase()) {
+        int targetRemoved = switch (difficulty.toLowerCase()) {
             case "easy" -> 40;
             case "medium" -> 50;
             case "hard" -> 56;
@@ -37,9 +42,17 @@ public class SudokuGenerator {
 
         int removed = 0;
         for (int[] pos : positions) {
-            if (removed >= cellsToRemove) break;
+            if (removed >= targetRemoved) break;
+
+            int saved = puzzle[pos[0]][pos[1]];
             puzzle[pos[0]][pos[1]] = 0;
-            removed++;
+
+            int count = solver.countSolutions(puzzle);
+            if (count == 1) {
+                removed++;
+            } else {
+                puzzle[pos[0]][pos[1]] = saved;
+            }
         }
 
         return puzzle;

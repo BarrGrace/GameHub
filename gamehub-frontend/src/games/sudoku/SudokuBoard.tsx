@@ -1,12 +1,20 @@
 interface Props {
   current: number[][]
   given: boolean[][]
+  conflicts: boolean[][]
   selectedCell: [number, number] | null
   onCellClick: (row: number, col: number) => void
   disabled: boolean
 }
 
-export default function SudokuBoard({ current, given, selectedCell, onCellClick, disabled }: Props) {
+export default function SudokuBoard({
+  current,
+  given,
+  conflicts,
+  selectedCell,
+  onCellClick,
+  disabled,
+}: Props) {
   return (
     <div className="inline-block bg-blue-500 p-1 rounded-lg">
       <div className="grid grid-cols-3 gap-1">
@@ -19,6 +27,7 @@ export default function SudokuBoard({ current, given, selectedCell, onCellClick,
                   const j = boxCol * 3 + c
                   const value = current[i][j]
                   const isGiven = given[i][j]
+                  const isConflict = conflicts[i][j]
                   const isSelected = selectedCell?.[0] === i && selectedCell?.[1] === j
                   const isInSameRow = selectedCell?.[0] === i
                   const isInSameCol = selectedCell?.[1] === j
@@ -32,6 +41,10 @@ export default function SudokuBoard({ current, given, selectedCell, onCellClick,
                     bg = isGiven ? 'bg-gray-700' : 'bg-gray-800'
                   }
                   if (isSelected) bg = 'bg-blue-900'
+                  if (isConflict) bg = 'bg-red-900'
+
+                  let textColor = isGiven ? 'text-gray-300' : 'text-blue-300'
+                  if (isConflict) textColor = 'text-red-300'
 
                   return (
                     <button
@@ -41,7 +54,7 @@ export default function SudokuBoard({ current, given, selectedCell, onCellClick,
                       className={`
                         w-10 h-10 flex items-center justify-center text-xl font-bold
                         ${bg}
-                        ${isGiven ? 'text-gray-300' : 'text-blue-300'}
+                        ${textColor}
                         ${!isGiven && !disabled ? 'hover:bg-blue-800' : ''}
                         disabled:cursor-not-allowed transition
                       `}

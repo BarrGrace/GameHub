@@ -37,7 +37,7 @@ export default function WordleGrid({ guesses, results, currentGuess, maxGuesses 
       cells.push(
         <div
           key={j}
-          className={`w-14 h-14 border-2 flex items-center justify-center text-2xl font-bold rounded ${colorClass}`}
+          className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 border-2 flex items-center justify-center text-2xl md:text-3xl font-bold rounded ${colorClass}`}
         >
           {letter}
         </div>

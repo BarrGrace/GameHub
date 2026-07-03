@@ -6,14 +6,14 @@ interface Props {
 
 export default function TicTacToeBoard({ board, onCellClick, disabled }: Props) {
   return (
-    <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
+    <div className="grid grid-cols-3 gap-2 max-w-xs md:max-w-md mx-auto">
       {board.map((cell, index) => (
         <button
           key={index}
           onClick={() => onCellClick(index)}
           disabled={disabled || cell !== null}
           className={`
-            aspect-square rounded-lg text-5xl font-bold
+            aspect-square rounded-lg text-5xl md:text-7xl font-bold
             flex items-center justify-center transition
             ${cell === 'X' ? 'bg-blue-900 text-blue-300' : ''}
             ${cell === 'O' ? 'bg-red-900 text-red-300' : ''}

@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { startWordleGame, submitWordleGuess } from './wordleApi'
 import WordleGrid from './WordleGrid'
+import WordleKeyboard from './WordleKeyboard'
+import { useNotification } from '../../components/NotificationProvider'
+import { useNavigate } from 'react-router-dom'
+
 
 type Color = 'green' | 'yellow' | 'grey'
 
@@ -15,6 +19,8 @@ export default function WordlePage() {
   const [won, setWon] = useState<boolean>(false)
   const [error, setError] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
+  const navigate = useNavigate()
+  const { show, dismiss } = useNotification()
 
   useEffect(() => {
     startNewGame()
@@ -55,9 +61,38 @@ export default function WordlePage() {
         setResults([...results, response.result])
         setCurrentGuess('')
         setFinished(response.finished)
+        if (response.finished) {
+          const score = response.won ? (7 - response.guessesUsed) * 15 : 0
+          show(
+            response.won ? '🎉 You won!' : '😔 Game over',
+            response.won ? 'success' : 'error',
+            {
+              subtext: response.won ? `Score: ${score}` : 'Better luck next time',
+              actions: [
+                {
+                  label: 'Play again',
+                  variant: 'primary',
+                  onClick: () => {
+                    dismiss()
+                    startNewGame()
+                  },
+                },
+                {
+                  label: 'Home',
+                  variant: 'secondary',
+                  onClick: () => {
+                    dismiss()
+                    navigate('/')
+                  },
+                },
+              ],
+            }
+          )
+        }
         setWon(response.won)
       } catch {
         setError('Invalid guess')
+        show('Invalid guess', 'error')
       } finally {
         setLoading(false)
       }
@@ -91,7 +126,7 @@ export default function WordlePage() {
         </button>
       </header>
 
-      <main className="max-w-md mx-auto">
+      <main className="max-w-3xl mx-auto">
         <WordleGrid
           guesses={guesses}
           results={results}
@@ -101,23 +136,11 @@ export default function WordlePage() {
 
         {error && <p className="text-red-400 text-sm mt-4 text-center">{error}</p>}
 
-        {finished && (
-          <div className="mt-8 text-center">
-            <h2 className={`text-3xl font-bold mb-4 ${won ? 'text-green-400' : 'text-red-400'}`}>
-              {won ? '🎉 You won!' : '😔 Game over'}
-            </h2>
-            <button
-              onClick={startNewGame}
-              className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded font-semibold transition"
-            >
-              Play Again
-            </button>
-          </div>
-        )}
+        <WordleKeyboard onKey={handleKeyPress} disabled={finished || loading} />
 
-        <p className="text-gray-400 text-sm text-center mt-6">
-          Type on your keyboard to guess. Press Enter to submit.
-        </p>
+      <p className="text-gray-400 text-sm text-center mt-6">
+        <span className="hidden md:inline">Type on your keyboard or </span>tap the keys and press Enter to submit.
+      </p>
       </main>
     </div>
   )

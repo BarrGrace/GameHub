@@ -1,21 +1,23 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { startTicTacToeGame, makeTicTacToeMove, getTicTacToeGame } from './tictactoeApi'
 import type { TicTacToeGame } from '../../api/types'
 import TicTacToeBoard from './TicTacToeBoard'
+import { useNotification } from '../../components/NotificationProvider'
 
 export default function TicTacToePage() {
   const { username } = useAuth()
+  const navigate = useNavigate()
+  const { show, dismiss } = useNotification()
   const [game, setGame] = useState<TicTacToeGame | null>(null)
   const [gameIdInput, setGameIdInput] = useState('')
   const [opponent, setOpponent] = useState('')
   const [error, setError] = useState('')
   const pollingRef = useRef<number | null>(null)
 
-  // Poll for updates when it's not our turn
   useEffect(() => {
-    if (!game || game.finished) {
+    if (!game || game.finished || game.mode === 'ai') {
       if (pollingRef.current) clearInterval(pollingRef.current)
       return
     }
@@ -30,7 +32,7 @@ export default function TicTacToePage() {
           const updated = await getTicTacToeGame(game.gameId)
           setGame(updated)
         } catch {
-          // silent fail on poll
+          // silent
         }
       }, 1000)
     }
@@ -40,14 +42,24 @@ export default function TicTacToePage() {
     }
   }, [game, username])
 
-  const handleStart = async () => {
+  const handleStartAI = async () => {
+    setError('')
+    try {
+      const newGame = await startTicTacToeGame('ai')
+      setGame(newGame)
+    } catch {
+      setError('Could not start game')
+    }
+  }
+
+  const handleStartPvp = async () => {
     if (!opponent.trim()) {
       setError('Enter opponent username')
       return
     }
     setError('')
     try {
-      const newGame = await startTicTacToeGame(opponent.trim())
+      const newGame = await startTicTacToeGame('pvp', opponent.trim())
       setGame(newGame)
     } catch {
       setError('Could not start game')
@@ -68,22 +80,53 @@ export default function TicTacToePage() {
     }
   }
 
-  const handleCellClick = async (position: number) => {
-    if (!game) return
-    setError('')
-    try {
-      const updated = await makeTicTacToeMove(game.gameId, position)
-      setGame(updated)
-    } catch (err: any) {
-      setError(err.response?.data || 'Move failed')
-    }
-  }
-
   const handleNewGame = () => {
     setGame(null)
     setGameIdInput('')
     setOpponent('')
     setError('')
+  }
+
+  const handleCellClick = async (position: number) => {
+    if (!game) return
+    setError('')
+
+    // Optimistic update
+    const optimisticBoard = [...game.board]
+    optimisticBoard[position] = game.currentTurn
+    const optimisticGame: TicTacToeGame = {
+      ...game,
+      board: optimisticBoard,
+      currentTurn: game.currentTurn === 'X' ? 'O' : 'X',
+    }
+    setGame(optimisticGame)
+
+    try {
+      const updated = await makeTicTacToeMove(game.gameId, position)
+
+      if (game.mode === 'ai') {
+        await new Promise((resolve) => setTimeout(resolve, 600))
+      }
+
+      setGame(updated)
+
+      if (updated.finished) {
+        const myMark = updated.playerX === username ? 'X' : 'O'
+        const message =
+          updated.winner === 'DRAW' ? '🤝 Draw!'
+          : updated.winner === myMark ? '🎉 You won!'
+          : '😔 You lost'
+        show(message, 'info', {
+          actions: [
+            { label: 'New game', variant: 'primary', onClick: () => { dismiss(); handleNewGame(); } },
+            { label: 'Home', variant: 'secondary', onClick: () => { dismiss(); navigate('/'); } },
+          ],
+        })
+      }
+    } catch (err: any) {
+      setGame(game)
+      setError(err.response?.data || 'Move failed')
+    }
   }
 
   if (!game) {
@@ -97,7 +140,17 @@ export default function TicTacToePage() {
 
         <main className="max-w-md mx-auto space-y-6">
           <div className="bg-gray-800 p-6 rounded-lg">
-            <h2 className="text-xl font-bold mb-4">Start a new game</h2>
+            <h2 className="text-xl font-bold mb-4">Play vs Computer</h2>
+            <button
+              onClick={handleStartAI}
+              className="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded font-semibold"
+            >
+              Start
+            </button>
+          </div>
+
+          <div className="bg-gray-800 p-6 rounded-lg">
+            <h2 className="text-xl font-bold mb-4">Play vs Friend</h2>
             <input
               type="text"
               placeholder="Opponent's username"
@@ -106,7 +159,7 @@ export default function TicTacToePage() {
               className="w-full p-3 rounded bg-gray-700 border border-gray-600 mb-4"
             />
             <button
-              onClick={handleStart}
+              onClick={handleStartPvp}
               className="w-full bg-blue-600 hover:bg-blue-700 p-3 rounded font-semibold"
             >
               Start
@@ -140,6 +193,7 @@ export default function TicTacToePage() {
     (game.currentTurn === 'X' && game.playerX === username) ||
     (game.currentTurn === 'O' && game.playerO === username)
   const myMark = game.playerX === username ? 'X' : 'O'
+  const opponentName = myMark === 'X' ? game.playerO : game.playerX
 
   return (
     <div className="min-h-screen p-6">
@@ -156,14 +210,16 @@ export default function TicTacToePage() {
 
       <main className="max-w-md mx-auto">
         <div className="text-center mb-4 space-y-1">
-          <p className="text-sm text-gray-400">Game ID: {game.gameId}</p>
+          {game.mode === 'pvp' && (
+            <p className="text-sm text-gray-400">Game ID: {game.gameId}</p>
+          )}
           <p className="text-gray-300">
             You are <span className="font-bold">{myMark}</span> vs{' '}
-            {myMark === 'X' ? game.playerO : game.playerX}
+            <span className="font-bold">{opponentName}</span>
           </p>
           {!game.finished && (
             <p className={isMyTurn ? 'text-green-400' : 'text-yellow-400'}>
-              {isMyTurn ? 'Your turn' : "Opponent's turn..."}
+              {isMyTurn ? 'Your turn' : game.mode === 'ai' ? 'AI is thinking...' : "Opponent's turn..."}
             </p>
           )}
         </div>
@@ -175,22 +231,6 @@ export default function TicTacToePage() {
         />
 
         {error && <p className="text-red-400 text-sm text-center mt-4">{error}</p>}
-
-        {game.finished && (
-          <div className="mt-8 text-center">
-            <h2 className="text-3xl font-bold mb-4">
-              {game.winner === 'DRAW' && '🤝 Draw!'}
-              {game.winner === myMark && '🎉 You won!'}
-              {game.winner && game.winner !== 'DRAW' && game.winner !== myMark && '😔 You lost'}
-            </h2>
-            <button
-              onClick={handleNewGame}
-              className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded font-semibold"
-            >
-              Play Again
-            </button>
-          </div>
-        )}
       </main>
     </div>
   )

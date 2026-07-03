@@ -19,13 +19,19 @@ public class TicTacToeController {
     @PostMapping("/start")
     public ResponseEntity<TicTacToeGame> startGame(@RequestBody Map<String, String> request) {
         String playerX = getCurrentUsername();
-        String playerO = request.get("playerO");
+        String mode = request.getOrDefault("mode", "pvp");
 
+        if ("ai".equals(mode)) {
+            TicTacToeGame game = ticTacToeService.startGame(playerX, "AI", "ai");
+            return ResponseEntity.ok(game);
+        }
+
+        String playerO = request.get("playerO");
         if (playerO == null || playerO.isBlank()) {
             throw new RuntimeException("playerO is required");
         }
 
-        TicTacToeGame game = ticTacToeService.startGame(playerX, playerO);
+        TicTacToeGame game = ticTacToeService.startGame(playerX, playerO, "pvp");
         return ResponseEntity.ok(game);
     }
 

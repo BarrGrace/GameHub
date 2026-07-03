@@ -3,6 +3,7 @@ interface Props {
   given: boolean[][]
   hConstraints: string[]
   vConstraints: string[]
+  conflicts: boolean[][]
   selectedCell: [number, number] | null
   onCellClick: (row: number, col: number) => void
   disabled: boolean
@@ -19,6 +20,7 @@ export default function TangoBoard({
   given,
   hConstraints,
   vConstraints,
+  conflicts,
   selectedCell,
   onCellClick,
   disabled,
@@ -45,12 +47,15 @@ export default function TangoBoard({
     <div className="inline-block bg-gray-700 p-4 rounded-lg">
       {[0, 1, 2, 3, 4, 5].map((i) => (
         <div key={i}>
-          {/* Row of cells with horizontal constraints between them */}
           <div className="flex items-center">
             {[0, 1, 2, 3, 4, 5].map((j) => {
               const value = current[i][j]
               const isGiven = given[i][j]
+              const isConflict = conflicts[i][j]
               const isSelected = selectedCell?.[0] === i && selectedCell?.[1] === j
+
+              let bg = isGiven ? 'bg-gray-900' : 'bg-gray-800'
+              if (isConflict) bg = 'bg-red-900'
 
               return (
                 <div key={j} className="flex items-center">
@@ -59,9 +64,9 @@ export default function TangoBoard({
                     disabled={disabled || isGiven}
                     className={`
                       w-12 h-12 flex items-center justify-center text-2xl rounded
-                      ${isGiven ? 'bg-gray-900' : 'bg-gray-800'}
+                      ${bg}
                       ${isSelected ? 'ring-2 ring-blue-500' : ''}
-                      ${!isGiven && !disabled ? 'hover:bg-gray-600' : ''}
+                      ${!isGiven && !disabled && !isConflict ? 'hover:bg-gray-600' : ''}
                       disabled:cursor-not-allowed transition
                     `}
                   >
@@ -77,7 +82,6 @@ export default function TangoBoard({
             })}
           </div>
 
-          {/* Vertical constraints row (between this row and the next) */}
           {i < 5 && (
             <div className="flex">
               {[0, 1, 2, 3, 4, 5].map((j) => (

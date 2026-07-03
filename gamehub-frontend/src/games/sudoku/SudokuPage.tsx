@@ -3,13 +3,18 @@ import { Link } from 'react-router-dom'
 import { startSudokuGame, submitSudokuMove, clearSudokuCell } from './sudokuApi'
 import type { SudokuGame } from '../../api/types'
 import SudokuBoard from './SudokuBoard'
+import { useNavigate } from 'react-router-dom'
+import { useNotification } from '../../components/NotificationProvider'
 
 export default function SudokuPage() {
   const [game, setGame] = useState<SudokuGame | null>(null)
+  const [selectedNumber, setSelectedNumber] = useState<number | null>(null)
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null)
   const [difficulty, setDifficulty] = useState<string>('easy')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
+  const { show, dismiss } = useNotification()
 
   const handleStart = async () => {
     setLoading(true)
@@ -17,6 +22,7 @@ export default function SudokuPage() {
     try {
       const newGame = await startSudokuGame(difficulty)
       setGame(newGame)
+      setSelectedNumber(null)
       setSelectedCell(null)
     } catch {
       setError('Could not start game')
@@ -25,51 +31,124 @@ export default function SudokuPage() {
     }
   }
 
-  const handleCellClick = (row: number, col: number) => {
+  const handleCellClick = async (row: number, col: number) => {
+    if (!game || game.finished) return
+    if (game.given[row][col]) {
+      setSelectedCell([row, col])
+      return
+    }
     setSelectedCell([row, col])
     setError('')
-  }
 
-  const handleNumberInput = async (value: number) => {
-    if (!game || !selectedCell) return
-    const [row, col] = selectedCell
-    if (game.given[row][col]) return
+    if (selectedNumber === null) return
 
-    setError('')
     try {
-      const updated = await submitSudokuMove(game.gameId, row, col, value)
-      setGame(updated)
+      if (selectedNumber === 0) {
+        const updated = await clearSudokuCell(game.gameId, row, col)
+        setGame(updated)
+      } else {
+        const updated = await submitSudokuMove(game.gameId, row, col, selectedNumber)
+        setGame(updated)
+        if (updated.finished && updated.won) {
+          show('🎉 You won!', 'success', {
+            subtext: `Sudoku (${updated.difficulty}) complete`,
+            actions: [
+              { label: 'Play again', variant: 'primary', onClick: () => { dismiss(); setGame(null); } },
+              { label: 'Home', variant: 'secondary', onClick: () => { dismiss(); navigate('/'); } },
+            ],
+          })
+        }
+      }
     } catch (err: any) {
       setError(err.response?.data || 'Invalid move')
     }
   }
 
-  const handleClear = async () => {
-    if (!game || !selectedCell) return
-    const [row, col] = selectedCell
-    if (game.given[row][col]) return
-
-    try {
-      const updated = await clearSudokuCell(game.gameId, row, col)
-      setGame(updated)
-    } catch {
-      setError('Could not clear')
-    }
-  }
-
-  // Keyboard support
+  // Keyboard support: press a number to select it
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (!game || !selectedCell || game.finished) return
+      if (!game || game.finished) return
       if (e.key >= '1' && e.key <= '9') {
-        handleNumberInput(parseInt(e.key))
+        setSelectedNumber(parseInt(e.key))
       } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
-        handleClear()
+        setSelectedNumber(0)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [game, selectedCell])
+  }, [game])
+
+  // Find cells that conflict with the current board (Sudoku rule violations)
+  const findConflicts = (): boolean[][] => {
+    const conflicts: boolean[][] = Array.from({ length: 9 }, () => Array(9).fill(false))
+    if (!game) return conflicts
+
+    const board = game.current
+
+    // Check rows
+    for (let i = 0; i < 9; i++) {
+      const seen: Record<number, number[]> = {}
+      for (let j = 0; j < 9; j++) {
+        const v = board[i][j]
+        if (v !== 0) {
+          if (!seen[v]) seen[v] = []
+          seen[v].push(j)
+        }
+      }
+      for (const cols of Object.values(seen)) {
+        if (cols.length > 1) cols.forEach((j) => (conflicts[i][j] = true))
+      }
+    }
+
+    // Check columns
+    for (let j = 0; j < 9; j++) {
+      const seen: Record<number, number[]> = {}
+      for (let i = 0; i < 9; i++) {
+        const v = board[i][j]
+        if (v !== 0) {
+          if (!seen[v]) seen[v] = []
+          seen[v].push(i)
+        }
+      }
+      for (const rows of Object.values(seen)) {
+        if (rows.length > 1) rows.forEach((i) => (conflicts[i][j] = true))
+      }
+    }
+
+    // Check 3x3 boxes
+    for (let br = 0; br < 3; br++) {
+      for (let bc = 0; bc < 3; bc++) {
+        const seen: Record<number, [number, number][]> = {}
+        for (let i = br * 3; i < br * 3 + 3; i++) {
+          for (let j = bc * 3; j < bc * 3 + 3; j++) {
+            const v = board[i][j]
+            if (v !== 0) {
+              if (!seen[v]) seen[v] = []
+              seen[v].push([i, j])
+            }
+          }
+        }
+        for (const cells of Object.values(seen)) {
+          if (cells.length > 1) cells.forEach(([i, j]) => (conflicts[i][j] = true))
+        }
+      }
+    }
+
+    return conflicts
+  }
+
+  // Count remaining placements per digit
+  const countsRemaining = (): Record<number, number> => {
+    const counts: Record<number, number> = { 1: 9, 2: 9, 3: 9, 4: 9, 5: 9, 6: 9, 7: 9, 8: 9, 9: 9 }
+    if (!game) return counts
+    for (let i = 0; i < 9; i++) {
+      for (let j = 0; j < 9; j++) {
+        const v = game.current[i][j]
+        if (v !== 0) counts[v] = (counts[v] ?? 0) - 1
+      }
+    }
+    return counts
+  }
 
   if (!game) {
     return (
@@ -107,6 +186,8 @@ export default function SudokuPage() {
       </div>
     )
   }
+  const counts = countsRemaining()
+  const conflicts = findConflicts()
 
   return (
     <div className="min-h-screen p-6">
@@ -125,49 +206,60 @@ export default function SudokuPage() {
         <p className="text-center text-gray-400 capitalize">Difficulty: {game.difficulty}</p>
 
         <div className="flex justify-center">
-          <SudokuBoard
-            current={game.current}
-            given={game.given}
-            selectedCell={selectedCell}
-            onCellClick={handleCellClick}
-            disabled={game.finished}
-          />
+        <SudokuBoard
+          current={game.current}
+          given={game.given}
+          conflicts={conflicts}
+          selectedCell={selectedCell}
+          onCellClick={handleCellClick}
+          disabled={game.finished}
+        />
         </div>
 
-        <div className="grid grid-cols-9 gap-1 max-w-md mx-auto">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+        <div>
+<p className="text-center text-gray-400 text-sm mb-2">
+  {selectedNumber === null
+    ? 'Press a number and click on a cell'
+    : selectedNumber === 0
+      ? 'Eraser selected: click a cell to clear it'
+      : `${selectedNumber} selected: click a cell to place it`}
+</p>
+          <div className="grid grid-cols-10 gap-1 max-w-md mx-auto">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => {
+              const remaining = counts[n] ?? 0
+              const complete = remaining <= 0
+              const isSelected = selectedNumber === n
+              return (
+                <button
+                  key={n}
+                  onClick={() => setSelectedNumber(n)}
+                  disabled={game.finished || complete}
+                  className={`
+                    aspect-square rounded font-bold text-lg transition
+                    ${isSelected ? 'ring-2 ring-blue-400 bg-blue-700' : ''}
+                    ${complete ? 'bg-gray-800 text-gray-500 line-through' : 'bg-gray-700 hover:bg-gray-600'}
+                    disabled:cursor-not-allowed
+                  `}
+                >
+                  {n}
+                </button>
+              )
+            })}
             <button
-              key={n}
-              onClick={() => handleNumberInput(n)}
-              disabled={!selectedCell || game.finished}
-              className="aspect-square bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:opacity-50 rounded font-bold text-lg transition"
+              onClick={() => setSelectedNumber(0)}
+              disabled={game.finished}
+              className={`
+                aspect-square rounded font-bold text-lg transition
+                ${selectedNumber === 0 ? 'ring-2 ring-blue-400 bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'}
+                disabled:cursor-not-allowed
+              `}
             >
-              {n}
-            </button>
-          ))}
-        </div>
-
-        <button
-          onClick={handleClear}
-          disabled={!selectedCell || game.finished}
-          className="w-full bg-gray-700 hover:bg-gray-600 disabled:opacity-50 p-2 rounded"
-        >
-          Clear Cell
-        </button>
-
-        {error && <p className="text-red-400 text-center">{error}</p>}
-
-        {game.finished && (
-          <div className="text-center">
-            <h2 className="text-3xl font-bold text-green-400 mb-4">🎉 You won!</h2>
-            <button
-              onClick={() => setGame(null)}
-              className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded font-semibold"
-            >
-              Play Again
+              ⌫
             </button>
           </div>
-        )}
+        </div>
+
+        {error && <p className="text-red-400 text-center">{error}</p>}
       </main>
     </div>
   )
