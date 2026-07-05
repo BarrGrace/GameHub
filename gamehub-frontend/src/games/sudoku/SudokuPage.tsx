@@ -5,6 +5,7 @@ import type { SudokuGame } from '../../api/types'
 import SudokuBoard from './SudokuBoard'
 import { useNavigate } from 'react-router-dom'
 import { useNotification } from '../../components/NotificationProvider'
+import { useSound } from '../../hooks/useSound'
 
 export default function SudokuPage() {
   const [game, setGame] = useState<SudokuGame | null>(null)
@@ -15,6 +16,7 @@ export default function SudokuPage() {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { show, dismiss } = useNotification()
+  const { play } = useSound()
 
   const handleStart = async () => {
     setLoading(true)
@@ -29,6 +31,29 @@ export default function SudokuPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const checkCellConflict = (board: number[][], row: number, col: number): boolean => {
+    const v = board[row][col]
+    if (v === 0) return false
+
+    // Check row
+    for (let j = 0; j < 9; j++) {
+      if (j !== col && board[row][j] === v) return true
+    }
+    // Check column
+    for (let i = 0; i < 9; i++) {
+      if (i !== row && board[i][col] === v) return true
+    }
+    // Check 3x3 box
+    const boxRow = Math.floor(row / 3) * 3
+    const boxCol = Math.floor(col / 3) * 3
+    for (let i = boxRow; i < boxRow + 3; i++) {
+      for (let j = boxCol; j < boxCol + 3; j++) {
+        if ((i !== row || j !== col) && board[i][j] === v) return true
+      }
+    }
+    return false
   }
 
   const handleCellClick = async (row: number, col: number) => {
@@ -46,10 +71,21 @@ export default function SudokuPage() {
       if (selectedNumber === 0) {
         const updated = await clearSudokuCell(game.gameId, row, col)
         setGame(updated)
+        play('move')
       } else {
         const updated = await submitSudokuMove(game.gameId, row, col, selectedNumber)
         setGame(updated)
+
+        // Check if this move creates a conflict — play wrong-move if so
+        const nowHasConflict = checkCellConflict(updated.current, row, col)
+        if (nowHasConflict) {
+          play('wrong-move')
+        } else {
+          play('move')
+        }
+
         if (updated.finished && updated.won) {
+          play('win')
           show('🎉 You won!', 'success', {
             subtext: `Sudoku (${updated.difficulty}) complete`,
             actions: [
@@ -59,8 +95,9 @@ export default function SudokuPage() {
           })
         }
       }
-    } catch (err: any) {
-      setError(err.response?.data || 'Invalid move')
+    } catch {
+      setError('Invalid move')
+      play('wrong-move')
     }
   }
 

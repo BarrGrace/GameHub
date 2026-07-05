@@ -5,6 +5,7 @@ import { startTicTacToeGame, makeTicTacToeMove, getTicTacToeGame } from './ticta
 import type { TicTacToeGame } from '../../api/types'
 import TicTacToeBoard from './TicTacToeBoard'
 import { useNotification } from '../../components/NotificationProvider'
+import { useSound } from '../../hooks/useSound'
 
 export default function TicTacToePage() {
   const { username } = useAuth()
@@ -15,6 +16,7 @@ export default function TicTacToePage() {
   const [opponent, setOpponent] = useState('')
   const [error, setError] = useState('')
   const pollingRef = useRef<number | null>(null)
+  const { play } = useSound()
 
   useEffect(() => {
     if (!game || game.finished || game.mode === 'ai') {
@@ -102,20 +104,32 @@ export default function TicTacToePage() {
     setGame(optimisticGame)
 
     try {
+      play('move')
       const updated = await makeTicTacToeMove(game.gameId, position)
 
       if (game.mode === 'ai') {
         await new Promise((resolve) => setTimeout(resolve, 600))
+        if (!updated.finished) play('move')
       }
 
       setGame(updated)
 
       if (updated.finished) {
         const myMark = updated.playerX === username ? 'X' : 'O'
-        const message =
-          updated.winner === 'DRAW' ? '🤝 Draw!'
-          : updated.winner === myMark ? '🎉 You won!'
-          : '😔 You lost'
+        let endSound: 'win' | 'lost' | 'draw'
+        let message: string
+        if (updated.winner === 'DRAW') {
+          endSound = 'draw'
+          message = '🤝 Draw!'
+        } else if (updated.winner === myMark) {
+          endSound = 'win'
+          message = '🎉 You won!'
+        } else {
+          endSound = 'lost'
+          message = '😔 You lost'
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        play(endSound)
         show(message, 'info', {
           actions: [
             { label: 'New game', variant: 'primary', onClick: () => { dismiss(); handleNewGame(); } },
@@ -126,6 +140,7 @@ export default function TicTacToePage() {
     } catch (err: any) {
       setGame(game)
       setError(err.response?.data || 'Move failed')
+      play('wrong-move')
     }
   }
 

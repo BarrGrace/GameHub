@@ -17,6 +17,8 @@ export interface Score {
 export interface WordleStartResponse {
   gameId: string
   maxGuesses: number
+  wordLength: number
+  difficulty: string
 }
 
 export interface WordleGuessResponse {

@@ -1,42 +1,33 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { startTangoGame, submitTangoMove, clearTangoCell } from './tangoApi'
 import type { TangoGame } from '../../api/types'
 import TangoBoard from './TangoBoard'
-import { useNavigate } from 'react-router-dom'
 import { useNotification } from '../../components/NotificationProvider'
+import { useSound } from '../../hooks/useSound'
 
 export default function TangoPage() {
+  const navigate = useNavigate()
+  const { show, dismiss } = useNotification()
+  const { play } = useSound()
   const [game, setGame] = useState<TangoGame | null>(null)
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null)
   const [difficulty, setDifficulty] = useState<string>('easy')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
-  const { show, dismiss } = useNotification()
   const [settled, setSettled] = useState(true)
-
-  const handleStart = async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const newGame = await startTangoGame(difficulty)
-      setGame(newGame)
-      setSelectedCell(null)
-    } catch {
-      setError('Could not start game')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const findConflicts = (): boolean[][] => {
     const conflicts: boolean[][] = Array.from({ length: 6 }, () => Array(6).fill(false))
     if (!game) return conflicts
+    return findConflictsFor(game)
+  }
 
-    const board = game.current
+  const findConflictsFor = (g: TangoGame): boolean[][] => {
+    const conflicts: boolean[][] = Array.from({ length: 6 }, () => Array(6).fill(false))
+    const board = g.current
 
-    // Check row balance (max 3 of each)
+    // Row balance
     for (let i = 0; i < 6; i++) {
       const counts: Record<number, number[]> = { 1: [], 2: [] }
       for (let j = 0; j < 6; j++) {
@@ -46,7 +37,7 @@ export default function TangoPage() {
       if (counts[2].length > 3) counts[2].forEach((j) => (conflicts[i][j] = true))
     }
 
-    // Check column balance
+    // Column balance
     for (let j = 0; j < 6; j++) {
       const counts: Record<number, number[]> = { 1: [], 2: [] }
       for (let i = 0; i < 6; i++) {
@@ -56,7 +47,7 @@ export default function TangoPage() {
       if (counts[2].length > 3) counts[2].forEach((i) => (conflicts[i][j] = true))
     }
 
-    // Check three-in-a-row horizontally
+    // Three-in-a-row horizontal
     for (let i = 0; i < 6; i++) {
       for (let j = 0; j <= 3; j++) {
         const v = board[i][j]
@@ -68,7 +59,7 @@ export default function TangoPage() {
       }
     }
 
-    // Check three-in-a-row vertically
+    // Three-in-a-row vertical
     for (let j = 0; j < 6; j++) {
       for (let i = 0; i <= 3; i++) {
         const v = board[i][j]
@@ -80,9 +71,9 @@ export default function TangoPage() {
       }
     }
 
-    // Check horizontal constraints
+    // Horizontal constraints
     for (let i = 0; i < 6; i++) {
-      const rowStr = game.hConstraints[i] || ''
+      const rowStr = g.hConstraints[i] || ''
       for (let j = 0; j < 5; j++) {
         const c = rowStr[j]
         const left = board[i][j]
@@ -99,9 +90,9 @@ export default function TangoPage() {
       }
     }
 
-    // Check vertical constraints
+    // Vertical constraints
     for (let i = 0; i < 5; i++) {
-      const rowStr = game.vConstraints[i] || ''
+      const rowStr = g.vConstraints[i] || ''
       for (let j = 0; j < 6; j++) {
         const c = rowStr[j]
         const top = board[i][j]
@@ -121,20 +112,36 @@ export default function TangoPage() {
     return conflicts
   }
 
+  const handleStart = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const newGame = await startTangoGame(difficulty)
+      setGame(newGame)
+      setSelectedCell(null)
+    } catch {
+      setError('Could not start game')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleCellClick = async (row: number, col: number) => {
-      if (!game || game.finished) return
-      if (game.given[row][col]) return
+    if (!game || game.finished) return
+    if (game.given[row][col]) return
 
-      setError('')
-
-      const currentValue = game.current[row][col]
+    setError('')
+    const currentValue = game.current[row][col]
 
     try {
       let updated
+      let placedValue = 0
       if (currentValue === 0) {
         updated = await submitTangoMove(game.gameId, row, col, 1)
+        placedValue = 1
       } else if (currentValue === 1) {
         updated = await submitTangoMove(game.gameId, row, col, 2)
+        placedValue = 2
       } else {
         updated = await clearTangoCell(game.gameId, row, col)
       }
@@ -143,7 +150,27 @@ export default function TangoPage() {
       setSettled(false)
       setTimeout(() => setSettled(true), 500)
 
+      if (placedValue !== 0) {
+        const newConflicts = findConflictsFor(updated)
+        if (newConflicts[row][col]) {
+          // Wait to see if the conflict sticks
+          setTimeout(() => {
+            setGame((current) => {
+              if (current && findConflictsFor(current)[row][col]) {
+                play('wrong-move')
+              }
+              return current
+            })
+          }, 500)
+        } else {
+          play('move')
+        }
+      } else {
+        play('move')
+      }
+
       if (updated.finished && updated.won) {
+        play('win')
         show('🎉 You won!', 'success', {
           subtext: `Tango (${updated.difficulty}) complete`,
           actions: [
@@ -154,38 +181,9 @@ export default function TangoPage() {
       }
     } catch (err: any) {
       setError(err.response?.data || 'Invalid move')
+      play('wrong-move')
     }
   }
-
-  const handlePlace = async (value: number) => {
-    if (!game || !selectedCell) return
-    const [row, col] = selectedCell
-    if (game.given[row][col]) return
-
-    setError('')
-    try {
-      const updated = await submitTangoMove(game.gameId, row, col, value)
-      setGame(updated)
-    } catch (err: any) {
-      setError(err.response?.data || 'Invalid move')
-    }
-  }
-
-  const handleClear = async () => {
-    if (!game || !selectedCell) return
-    const [row, col] = selectedCell
-    if (game.given[row][col]) return
-
-    try {
-      const updated = await clearTangoCell(game.gameId, row, col)
-      setGame(updated)
-    } catch {
-      setError('Could not clear')
-    }
-  }
-
-  const conflicts = findConflicts()
-  const displayedConflicts = settled ? conflicts : Array.from({ length: 6 }, () => Array(6).fill(false))
 
   if (!game) {
     return (
@@ -229,6 +227,9 @@ export default function TangoPage() {
     )
   }
 
+  const conflicts = findConflicts()
+  const displayedConflicts = settled ? conflicts : Array.from({ length: 6 }, () => Array(6).fill(false))
+
   return (
     <div className="min-h-screen p-6">
       <header className="flex justify-between items-center mb-8 max-w-4xl mx-auto">
@@ -246,40 +247,16 @@ export default function TangoPage() {
         <p className="text-center text-gray-400 capitalize">Difficulty: {game.difficulty}</p>
 
         <div className="flex justify-center">
-        <TangoBoard
-          current={game.current}
-          given={game.given}
-          hConstraints={game.hConstraints}
-          vConstraints={game.vConstraints}
-          conflicts={displayedConflicts}
-          selectedCell={selectedCell}
-          onCellClick={handleCellClick}
-          disabled={game.finished}
-        />
-        </div>
-
-        <div className="grid grid-cols-3 gap-2 max-w-xs mx-auto">
-          <button
-            onClick={() => handlePlace(1)}
-            disabled={!selectedCell || game.finished}
-            className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 p-3 rounded text-2xl"
-          >
-            ☀️
-          </button>
-          <button
-            onClick={() => handlePlace(2)}
-            disabled={!selectedCell || game.finished}
-            className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 p-3 rounded text-2xl"
-          >
-            🌙
-          </button>
-          <button
-            onClick={handleClear}
-            disabled={!selectedCell || game.finished}
-            className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 p-3 rounded font-semibold"
-          >
-            Clear
-          </button>
+          <TangoBoard
+            current={game.current}
+            given={game.given}
+            hConstraints={game.hConstraints}
+            vConstraints={game.vConstraints}
+            conflicts={displayedConflicts}
+            selectedCell={selectedCell}
+            onCellClick={handleCellClick}
+            disabled={game.finished}
+          />
         </div>
 
         {error && <p className="text-red-400 text-center">{error}</p>}

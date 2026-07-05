@@ -1,8 +1,8 @@
 import client from '../../api/client'
 import type { WordleStartResponse, WordleGuessResponse } from '../../api/types'
 
-export async function startWordleGame(): Promise<WordleStartResponse> {
-  const response = await client.post<WordleStartResponse>('/wordle/start')
+export async function startWordleGame(difficulty: string = 'easy'): Promise<WordleStartResponse> {
+  const response = await client.post<WordleStartResponse>('/wordle/start', { difficulty })
   return response.data
 }
 

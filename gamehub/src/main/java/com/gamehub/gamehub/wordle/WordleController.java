@@ -18,13 +18,16 @@ public class WordleController {
     }
 
     @PostMapping("/start")
-    public ResponseEntity<Map<String, Object>> startGame() {
+    public ResponseEntity<Map<String, Object>> startGame(@RequestBody Map<String, String> request) {
         String username = getCurrentUsername();
-        WordleGame game = wordleService.startGame(username);
+        String difficulty = request.get("difficulty") != null ? request.get("difficulty") : "easy";
+        WordleGame game = wordleService.startGame(username, difficulty);
 
         return ResponseEntity.ok(Map.of(
             "gameId", game.getGameId(),
-            "maxGuesses", game.getMaxGuesses()
+            "maxGuesses", game.getMaxGuesses(),
+            "wordLength", game.getWordLength(),
+            "difficulty", game.getDifficulty()
         ));
     }
 

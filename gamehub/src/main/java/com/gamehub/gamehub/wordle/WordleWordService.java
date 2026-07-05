@@ -33,10 +33,6 @@ public class WordleWordService {
         this.words = data.get("words");
     }
 
-    public Word pickRandomWord() {
-        return words.get(random.nextInt(words.size()));
-    }
-
     public Word pickRandomWord(String difficulty) {
         List<Word> filtered = words.stream()
             .filter(w -> w.getDifficulty().equalsIgnoreCase(difficulty))

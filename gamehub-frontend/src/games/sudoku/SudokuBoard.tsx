@@ -16,11 +16,11 @@ export default function SudokuBoard({
   disabled,
 }: Props) {
   return (
-    <div className="inline-block bg-blue-500 p-1 rounded-lg">
-      <div className="grid grid-cols-3 gap-1">
+    <div className="inline-block bg-blue-500 rounded-lg overflow-hidden">
+      <div className="grid grid-cols-3 gap-1 bg-blue-500 p-1">
         {[0, 1, 2].map((boxRow) =>
           [0, 1, 2].map((boxCol) => (
-            <div key={`${boxRow}-${boxCol}`} className="grid grid-cols-3 gap-px bg-gray-600 p-px">
+            <div key={`${boxRow}-${boxCol}`} className="grid grid-cols-3 gap-[2px] bg-gray-500 p-[2px]">
               {[0, 1, 2].map((r) =>
                 [0, 1, 2].map((c) => {
                   const i = boxRow * 3 + r
